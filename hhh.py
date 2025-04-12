@@ -36,7 +36,12 @@ def process_image(image, apply_rotation=True):
                 if int(cls) == label_index and confidences[i] > confidence_threshold:
                     x1, y1, x2, y2 = map(int, boxes[i])
                     license_plate_image = image[y1:y2, x1:x2]
-                    
+
+                    # 图像增强：锐化和对比度调整
+                    license_plate_image = cv2.cvtColor(license_plate_image, cv2.COLOR_BGR2GRAY)
+                    license_plate_image = cv2.equalizeHist(license_plate_image)
+                    license_plate_image = cv2.cvtColor(license_plate_image, cv2.COLOR_GRAY2BGR)
+
                     # 使用OCR进行车牌识别
                     ocr_result = ocr.ocr(license_plate_image, cls=True)
 
@@ -45,10 +50,9 @@ def process_image(image, apply_rotation=True):
                             isinstance(ocr_result[0], list) and len(ocr_result[0]) > 0:
                         license_plate_number = ocr_result[0][0][1][0]
 
-                        
                         # 清洗车牌号，只保留汉字、字母和数字
                         cleaned_license_plate_number = re.sub(r'[^a-zA-Z0-9\u4e00-\u9fff]', '', license_plate_number)
-                        
+
                         cv2.rectangle(image, (x1, y1), (x2, y2), (255, 0, 0), 4)
 
                         # 设置支持中文的字体路径
@@ -142,6 +146,18 @@ def extract_license_plate(image):
 
     return None
 
+def enhance_license_plate(image):
+    """对车牌图像进行增强处理"""
+    # 转换为灰度图
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    
+    # 直方图均衡化增强对比度
+    equalized = cv2.equalizeHist(gray)
+    
+    # 转回BGR格式
+    enhanced = cv2.cvtColor(equalized, cv2.COLOR_GRAY2BGR)
+    return enhanced
+
 def process_folder(folder_path, true_labels):
     total_images = 0
     correct_predictions = 0
@@ -160,27 +176,39 @@ def process_folder(folder_path, true_labels):
                 true_license_plate = true_labels.get(file_name, None)
 
                 if true_license_plate is not None:
-                    # 使用OCR识别车牌
+                    # 首次尝试OCR识别
                     ocr_result = ocr.ocr(license_plate_image, cls=True)
-                    # 检查 ocr_result 是否为有效结果
-                    if ocr_result and isinstance(ocr_result, list) and len(ocr_result) > 0:
+                    recognition_success = False
 
+                    # 检查第一次识别结果
+                    if ocr_result and isinstance(ocr_result, list) and len(ocr_result) > 0:
                         if isinstance(ocr_result[0], list) and len(ocr_result[0]) > 0:
                             recognized_license_plate = ocr_result[0][0][1][0]
-
-                            # 清洗识别结果和真实车牌号
                             cleaned_recognized_plate = clean_license_plate(recognized_license_plate)
                             cleaned_true_plate = clean_license_plate(true_license_plate)
 
-                            # 比较识别结果与真实车牌号
                             if cleaned_recognized_plate == cleaned_true_plate:
                                 correct_predictions += 1
+                                recognition_success = True
+                    
+                    # 如果第一次识别失败，尝试图像增强
+                    if not recognition_success:
+                        enhanced_image = enhance_license_plate(license_plate_image)
+                        ocr_result = ocr.ocr(enhanced_image, cls=True)
+                        
+                        if ocr_result and isinstance(ocr_result, list) and len(ocr_result) > 0:
+                            if isinstance(ocr_result[0], list) and len(ocr_result[0]) > 0:
+                                recognized_license_plate = ocr_result[0][0][1][0]
+                                cleaned_recognized_plate = clean_license_plate(recognized_license_plate)
+                                
+                                if cleaned_recognized_plate == cleaned_true_plate:
+                                    correct_predictions += 1
+                                else:
+                                    st.write(f"文件 {file_name} 识别错误")
                             else:
-                                st.write(f"文件 {file_name} 识别错误")    
+                                st.write(f"文件 {file_name} 的 OCR 结果无效")
                         else:
-                            st.write(f"文件 {file_name} 的 OCR 结果无效")
-                    else:
-                        st.write(f"文件 {file_name} 的 OCR 结果为空")
+                            st.write(f"文件 {file_name} 的 OCR 结果为空")
                 else:
                     st.write(f"文件 {file_name} 没有对应的真实车牌号")
             else:
