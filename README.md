@@ -53,5 +53,7 @@ streamlit run hhh.py
 ### 文件夹处理
 
 ![LP-output](https://github.com/Lesson927/LPR/blob/main/images/output2.png)
+加入一些图像处理提高了识别率
+![LP-output](https://github.com/Lesson927/LPR/blob/main/images/output3.png)
 
 
